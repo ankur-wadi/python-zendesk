@@ -4,7 +4,7 @@ class Zendesk(object):
     def __init__(self, subdomain, auth, field_mapping={}, endpoint="https://{subdomain}.zendesk.com/api/v2"):
         self.subdomain, self.auth = subdomain, auth
         self.endpoint = endpoint.format(subdomain=subdomain)
-        self.field_mapping = dict((v, k) for k, v in field_mapping.items())
+        self.field_mapping = field_mapping
         self.session = requests.session()
         
     def request(self, method, url, *args, **kwargs):
@@ -30,16 +30,26 @@ class Zendesk(object):
    
     @property
     def fields(self):
-        if not hasattr(self, '_fields'): self._fields = self._get_fields()
-        return self._fields
+        return dict((self.field_mapping.get(v['id'], v['title']), v) for v in self.id_fields.values())
+    
+    @property
+    def title_fields(self):
+        return dict((v['title'], v) for v in self.id_fields.values())
     
     @property
     def id_fields(self):
-        return dict((v['id'], v) for v in self.fields.values())
+        if not hasattr(self, '_id_fields'): self._id_fields = self._get_fields()
+        return self._id_fields
+
+    def get_field(self, k):
+        fd = self.fields.get(k)
+        if not fd: fd = self.id_fields.get(k)
+        if not fd: fd = self.title_fields.get(k)
+        return fd
     
     def _get_fields(self):
         ret = self.get('/ticket_fields.json')
-        fields = dict((self.field_mapping.get(e['title'], e['title']), e) for e in ret.json['ticket_fields'])
+        fields = dict((e['id'], e) for e in ret.json['ticket_fields'])
         if 'custom_field_options' in fields:
             fields['options'] = [o['value'] for o in fields['custom_field_options']]
         return fields
@@ -50,14 +60,16 @@ class Zendesk(object):
         data['custom_fields'] = []
         fields = data.pop('fields', {})
         for k in fields.keys():
-            if k not in self.fields: continue
+            fd = self.get_field(k)
             v = fields[k]
-            assert ('options' not in self.fields[k]) or (v in self.fields[k]['options'])
-            data['custom_fields'].append({'id' : self.fields[k]['id'], 'value' : v})
+            assert fd is not None, "No match for field %s" % k
+            assert ('options' not in fd) or (v in fd['options'])
+            data['custom_fields'].append({'id' : fd['id'], 'value' : v})
         return data
 
-    def update_ticket_status(self, ticket_id, status, comment):
-        return self.put("/tickets/%s.json" % ticket_id, {'ticket':{'status' : status, 'comment' : {'body': comment}}})
+    def update_ticket(self, ticket_id, **data):
+        data = self.format_task_data(data)
+        return self.put("/tickets/%s.json" % ticket_id, {'ticket': data})
 
     def add_tags(self, ticket_id, tags):
         tags = [tags] if isinstance(tags, basestring) else tags
