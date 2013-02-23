@@ -28,6 +28,11 @@ class Zendesk(object):
         kwargs['headers']['Content-Type'] = 'application/json'
         return self.request('PUT', url, data=json.dumps(data), *args, **kwargs) 
    
+    def delete(self, url, data, *args, **kwargs):
+        kwargs['headers'] = kwargs.get('headers', {})
+        kwargs['headers']['Content-Type'] = 'application/json'
+        return self.request('DELETE', url, data=json.dumps(data), *args, **kwargs) 
+   
     @property
     def fields(self):
         return dict((self.field_mapping.get(v['id'], v['title']), v) for v in self.id_fields.values())
@@ -75,6 +80,10 @@ class Zendesk(object):
         tags = [tags] if isinstance(tags, basestring) else tags
         return self.put("/tickets/%s/tags.json" % ticket_id, {'tags':tags})
 
+    def delete_tags(self, ticket_id, tags):
+        tags = [tags] if isinstance(tags, basestring) else tags
+        return self.delete("/tickets/%s/tags.json" % ticket_id, {'tags':tags})
+
     def list_tickets(self, view_id):
         ret = self.get("/views/%s/tickets.json" % view_id)
         return ret.json
@@ -84,4 +93,9 @@ class Zendesk(object):
         data['type'] = 'task'
         return self.post('/tickets.json', {'ticket' : data})
 
-
+    def get_audits(self, ticket_id):
+        return self.get("/tickets/385/audits.json").json
+    
+    def get_comments(self, ticket_id):
+        comments = lambda js: [dict(e, created_at=a['created_at'])  for a in js['audits'] for e in a['events'] if e['type'] == 'Comment']
+        return comments(self.get_audits(ticket_id))
