@@ -56,7 +56,7 @@ class Zendesk(object):
     
     def format_task_data(self, data):
         assert 'comment' in data, "must have a description"
-        data['comment'] = data['comment'] if isinstance(data['comment'], dict) else {'body' : data['comment']}
+        data['comment'] = data['comment'] if isinstance(data['comment'], dict) else {'body' : data['comment'], 'public' : False}
         data['custom_fields'] = []
         fields = data.pop('fields', {})
         for k in fields.keys():
