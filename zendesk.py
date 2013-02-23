@@ -94,7 +94,7 @@ class Zendesk(object):
         return self.post('/tickets.json', {'ticket' : data})
 
     def get_audits(self, ticket_id):
-        return self.get("/tickets/385/audits.json").json
+        return self.get("/tickets/%s/audits.json" % ticket_id).json
     
     def get_comments(self, ticket_id):
         comments = lambda js: [dict(e, created_at=a['created_at'])  for a in js['audits'] for e in a['events'] if e['type'] == 'Comment']
