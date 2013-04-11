@@ -6,6 +6,25 @@ class Zendesk(object):
         self.endpoint = endpoint.format(subdomain=subdomain)
         self.field_mapping = field_mapping
         self.session = requests.session()
+        self.ignore_missing_fields = False
+
+    def get_users(self, email=None, external_id=None):
+        assert email or external_id, "must specify either email or external_id!"
+        params = {'query': email} if email else {'external_id' : external_id}
+        ret = self.get('/users.json', params=params)
+        return ret.json['users']
+
+    def create_user(self, **kwargs):
+        ret = self.post("/users.json", data={'user': kwargs})
+        if ret.json.get('error', '') == 'RecordInvalid':
+            raise ValueError(ret.content)
+        return ret.json['user']
+
+    def update_user(self, user_id, **kwargs):
+        ret = self.put("/users/%d.json" % user_id, data={'user': kwargs})
+        if ret.json.get('error', '') == 'RecordInvalid':
+            raise ValueError(ret.content)
+        return ret.json['user']
 
     def request(self, method, url, *args, **kwargs):
         if not url.startswith("http"): url = self.endpoint + url
@@ -67,6 +86,7 @@ class Zendesk(object):
         for k in fields.keys():
             fd = self.get_field(k)
             v = fields[k]
+            if fd is None and self.ignore_missing_fields: continue
             assert fd is not None, "No match for field %s" % k
             assert ('options' not in fd) or (v in fd['options'])
             data['custom_fields'].append({'id' : fd['id'], 'value' : v})
@@ -99,17 +119,4 @@ class Zendesk(object):
     def get_comments(self, ticket_id):
         comments = lambda js: [dict(e, created_at=a['created_at'])  for a in js['audits'] for e in a['events'] if e['type'] == 'Comment']
         return comments(self.get_audits(ticket_id))
-
-    def get_users(self, email=None, external_id=None):
-        assert email or external_id, "must specify either email or external_id!"
-        params = {'query': email} if email else {'external_id' : external_id}
-        ret = self.get('/users.json', params=params)
-        return ret.json['users']
-
-    def create_user(self, **kwargs):
-        ret = self.post("/users.json", data={'user': kwargs})
-        if ret.json.get('error', '') == 'RecordInvalid':
-            raise ValueError(ret.content)
-        return ret.json['user']
-
 
