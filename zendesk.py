@@ -8,6 +8,10 @@ class Zendesk(object):
         self.session = requests.session()
         self.ignore_missing_fields = False
 
+    def search(self, query):
+        ret = self.get('/search.json', params={'query': query})
+        return ret.json
+
     def get_users(self, email=None, external_id=None):
         assert email or external_id, "must specify either email or external_id!"
         params = {'query': email} if email else {'external_id' : external_id}
@@ -24,7 +28,10 @@ class Zendesk(object):
         ret = self.put("/users/%d.json" % user_id, data={'user': kwargs})
         if ret.json.get('error', '') == 'RecordInvalid':
             raise ValueError(ret.content)
-        return ret.json['user']
+        try:
+            return ret.json['user']
+        except Exception:
+            raise ValueError(ret.content)
 
     def request(self, method, url, *args, **kwargs):
         if not url.startswith("http"): url = self.endpoint + url
