@@ -2,6 +2,11 @@ import requests, json
 import logging
 import time
 
+class ZendeskError(Exception):
+    def __init__(self, message, **kwargs):
+        super(ZendeskError, self).__init__(message)
+        self.kwargs = kwargs
+
 class Zendesk(object):
     def __init__(self, subdomain, auth, field_mapping={}, endpoint="https://{subdomain}.zendesk.com/api/v2", auto_retry=True):
         self.subdomain, self.auth = subdomain, auth
@@ -48,6 +53,8 @@ class Zendesk(object):
             self.logger.warn("Zendesk rate limit reached, retrying after {} seconds: {} {}".format(retry_after, method, url))
             time.sleep(retry_after)
             return self.request(method, url, *args, **kwargs)
+        if ret.status_code >= 400:
+            raise ZendeskError(u"Bad status: {} {} {} {}".format(method, url, ret.status_code, ret.text), response=ret, method=method, url=url, args=args, kwargs=kwargs)
         try:
             setattr(ret, 'json', json.loads(ret.content))
         except Exception: ret.json = None
