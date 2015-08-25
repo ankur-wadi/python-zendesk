@@ -1,11 +1,18 @@
 import requests, json
+import logging
+import time
 
 class Zendesk(object):
-    def __init__(self, subdomain, auth, field_mapping={}, endpoint="https://{subdomain}.zendesk.com/api/v2"):
+    def __init__(self, subdomain, auth, field_mapping={}, endpoint="https://{subdomain}.zendesk.com/api/v2", auto_retry=True):
         self.subdomain, self.auth = subdomain, auth
         self.endpoint = endpoint.format(subdomain=subdomain)
         self.field_mapping = field_mapping
         self.session = requests.session()
+        self.auto_retry = True
+        self.logger = logging.getLogger('zendesk')
+        #import requesocks
+        #self.session = requesocks.session()
+        #self.session.proxies = {'https': 'socks5://127.0.0.1:9090'}
         self.ignore_missing_fields = False
 
     def search(self, query):
@@ -36,9 +43,14 @@ class Zendesk(object):
     def request(self, method, url, *args, **kwargs):
         if not url.startswith("http"): url = self.endpoint + url
         ret = self.session.request(method, url, auth=self.auth, *args, **kwargs)
+        if self.auto_retry and ret.status_code == 429: # rate limit
+            retry_after = int(ret.headers['Retry-After'])
+            self.logger.warn("Zendesk rate limit reached, retrying after {} seconds: {} {}".format(retry_after, method, url))
+            time.sleep(retry_after)
+            return self.request(method, url, *args, **kwargs)
         try:
             setattr(ret, 'json', json.loads(ret.content))
-        except Exception, e: ret.json = None
+        except Exception: ret.json = None
         return ret
 
     def get(self, url, *args, **kwargs):
