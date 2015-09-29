@@ -107,17 +107,18 @@ class Zendesk(object):
         return fields
 
     def format_task_data(self, data):
-        assert 'comment' in data, "must have a description"
-        data['comment'] = data['comment'] if isinstance(data['comment'], dict) else {'body' : data['comment'], 'public' : False}
-        data['custom_fields'] = []
-        fields = data.pop('fields', {})
-        for k in fields.keys():
-            fd = self.get_field(k)
-            v = fields[k]
-            if fd is None and self.ignore_missing_fields: continue
-            assert fd is not None, "No match for field %s" % k
-            assert ('options' not in fd) or (v in fd['options'])
-            data['custom_fields'].append({'id' : fd['id'], 'value' : v})
+        if 'comment' in data:
+            data['comment'] = data['comment'] if isinstance(data['comment'], dict) else {'body' : data['comment'], 'public' : False}
+        if 'fields' in data:
+            data['custom_fields'] = []
+            fields = data.pop('fields')
+            for k in fields.keys():
+                fd = self.get_field(k)
+                v = fields[k]
+                if fd is None and self.ignore_missing_fields: continue
+                assert fd is not None, "No match for field %s" % k
+                assert ('options' not in fd) or (v in fd['options'])
+                data['custom_fields'].append({'id' : fd['id'], 'value' : v})
         return data
 
     def update_ticket(self, ticket_id, **data):
