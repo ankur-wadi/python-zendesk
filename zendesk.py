@@ -8,17 +8,19 @@ class ZendeskError(Exception):
         self.kwargs = kwargs
 
 class Zendesk(object):
-    def __init__(self, subdomain, auth, field_mapping={}, endpoint="https://{subdomain}.zendesk.com/api/v2", auto_retry=True):
+    def __init__(self, subdomain, auth=None, field_mapping={}, endpoint="https://{subdomain}.zendesk.com/api/v2", auto_retry=True):
         self.subdomain, self.auth = subdomain, auth
         self.endpoint = endpoint.format(subdomain=subdomain)
         self.field_mapping = field_mapping
-        self.session = requests.session()
+        self.session = self.get_session()
         self.auto_retry = True
         self.logger = logging.getLogger('zendesk')
-        #import requesocks
-        #self.session = requesocks.session()
-        #self.session.proxies = {'https': 'socks5://127.0.0.1:9090'}
         self.ignore_missing_fields = False
+
+    def get_session(self):
+        s = requests.session()
+        s.auth = self.auth
+        return s
 
     def search(self, query):
         ret = self.get('/search.json', params={'query': query})
@@ -47,7 +49,7 @@ class Zendesk(object):
 
     def request(self, method, url, *args, **kwargs):
         if not url.startswith("http"): url = self.endpoint + url
-        ret = self.session.request(method, url, auth=self.auth, *args, **kwargs)
+        ret = self.session.request(method, url, *args, **kwargs)
         if self.auto_retry and ret.status_code == 429: # rate limit
             retry_after = int(ret.headers['Retry-After'])
             self.logger.warn("Zendesk rate limit reached, retrying after {} seconds: {} {}".format(retry_after, method, url))
@@ -145,4 +147,18 @@ class Zendesk(object):
     def get_comments(self, ticket_id):
         comments = lambda js: [dict(e, created_at=a['created_at'])  for a in js['audits'] for e in a['events'] if e['type'] == 'Comment']
         return comments(self.get_audits(ticket_id))
+
+    def get_incremental_tickets(self, start_time, sample=False):
+        if sample:
+            return self.get('/incremental/tickets/sample.json?start_time={}'.format(start_time))
+        else:
+            return self.get('/incremental/tickets.json?start_time={}'.format(start_time))
+
+class ZendeskSocks(Zendesk):
+    def get_session(self):
+        import requesocks
+        s = requesocks.session()
+        s.proxies = {'https': 'socks5://127.0.0.1:9090'}
+        s.auth = self.auth
+        return s
 
