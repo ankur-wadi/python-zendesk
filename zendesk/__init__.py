@@ -8,12 +8,13 @@ class ZendeskError(Exception):
         self.kwargs = kwargs
 
 class Zendesk(object):
-    def __init__(self, subdomain, auth=None, field_mapping={}, endpoint="https://{subdomain}.zendesk.com/api/v2", auto_retry=True):
+    def __init__(self, subdomain, auth=None, field_mapping={}, endpoint="https://{subdomain}.zendesk.com/api/v2", auto_retry=True, timeout=30):
         self.subdomain, self.auth = subdomain, auth
         self.endpoint = endpoint.format(subdomain=subdomain)
         self.field_mapping = field_mapping
         self.session = self.get_session()
         self.auto_retry = True
+        self.timeout = timeout
         self.logger = logging.getLogger('zendesk')
         self.ignore_missing_fields = False
 
@@ -49,7 +50,7 @@ class Zendesk(object):
 
     def request(self, method, url, *args, **kwargs):
         if not url.startswith("http"): url = self.endpoint + url
-        ret = self.session.request(method, url, *args, **kwargs)
+        ret = self.session.request(method, url, *args, timeout=self.timeout, **kwargs)
         if self.auto_retry and ret.status_code == 429: # rate limit
             retry_after = int(ret.headers['Retry-After'])
             self.logger.warn("Zendesk rate limit reached, retrying after {} seconds: {} {}".format(retry_after, method, url))
